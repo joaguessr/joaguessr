@@ -39,6 +39,8 @@
     button:hover { background: #00b058; }
     button.secondary { background: #444; }
     button.secondary:hover { background: #555; }
+    button.danger { background: #e74c3c; color: white; }
+    button.danger:hover { background: #c0392b; }
 
     .leaflet-popup-content-wrapper { font-size: 16px; text-align: center; padding: 5px; }
   </style>
@@ -57,6 +59,7 @@
     </select>
     <button onclick="revealQuestionGuesses()">Reveal Map Pins</button>
     <button class="secondary" onclick="toggleEditor()">⚙️ Set Answers</button>
+    <button class="danger" onclick="resetAllGuesses()">🗑️ Reset All Guesses</button>
   </div>
 
   <!-- Easy Question Manager Drawer -->
@@ -154,17 +157,37 @@
     // Save target answer directly to Firebase
     async function saveTargetToFirebase() {
       const qNum = document.getElementById('q-select').value;
-      const lat = parseFloat(document.getElementById('edit-lat').value);
-      const lng = parseFloat(document.getElementById('edit-lng').value);
+      const latVal = document.getElementById('edit-lat').value;
+      const lngVal = document.getElementById('edit-lng').value;
+
+      const lat = parseFloat(latVal);
+      const lng = parseFloat(lngVal);
 
       if (isNaN(lat) || isNaN(lng)) return alert("Please enter valid Latitude and Longitude numbers!");
 
       try {
-        await db.ref(`targetAnswers/q${qNum}`).set({ lat, lng });
+        await db.ref(`targetAnswers/q${qNum}`).set({
+          lat: Number(lat.toFixed(7)),
+          lng: Number(lng.toFixed(7))
+        });
         alert(`Target answer for Question ${qNum} saved!`);
       } catch (err) {
-        alert("Failed to save answer location. See console for details.");
-        console.error(err);
+        console.error("Firebase Save Error:", err);
+        alert(`Firebase Error: ${err.message || err.code || 'Permission Denied / Network Issue'}`);
+      }
+    }
+
+    // Delete all user guess entries from Firebase
+    async function resetAllGuesses() {
+      if (confirm("Are you sure you want to delete all player guesses across all questions?")) {
+        try {
+          await db.ref('guesses').remove();
+          clearPreviousLayers();
+          alert("All guess historical data has been completely erased!");
+        } catch (err) {
+          console.error("Error resetting guesses:", err);
+          alert(`Failed to reset guesses: ${err.message || 'Unknown error'}`);
+        }
       }
     }
 
