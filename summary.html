@@ -73,7 +73,11 @@
     <!-- Event Mode Display Title -->
     <span id="event-q-title">Question 1</span>
 
-    <button onclick="revealQuestionGuesses()">Reveal Map Pins</button>
+    <!-- Step 1: Reveal Guesses -->
+    <button onclick="revealPlayerGuesses()">Reveal Map Pins</button>
+
+    <!-- Step 2: Reveal Correct Answer -->
+    <button class="danger" onclick="revealAnswerPin()">📍 Reveal Answer</button>
     
     <!-- Admin Buttons -->
     <button id="btn-set-answers" class="secondary admin-only" onclick="toggleEditor()">⚙️ Set Answers</button>
@@ -128,6 +132,7 @@
     }).addTo(map);
 
     let currentLayers = [];
+    let activeBounds = [];
     let isEventMode = false;
 
     // Custom Marker Icons
@@ -153,7 +158,6 @@
       const editor = document.getElementById('target-editor');
 
       if (isEventMode) {
-        // Switch to Event Mode
         adminElements.forEach(el => el.style.display = 'none');
         selectContainer.style.display = 'none';
         editor.style.display = 'none';
@@ -164,7 +168,6 @@
         
         updateEventTitle();
       } else {
-        // Switch back to Admin Mode
         adminElements.forEach(el => el.style.display = 'inline-block');
         selectContainer.style.display = 'inline-block';
         
@@ -266,39 +269,22 @@
     function clearPreviousLayers() {
       currentLayers.forEach(layer => map.removeLayer(layer));
       currentLayers = [];
+      activeBounds = [];
     }
 
-    // Reveal player pins and target pin
-    async function revealQuestionGuesses() {
+    // 1. Reveal ONLY Player Guesses
+    async function revealPlayerGuesses() {
       clearPreviousLayers();
 
       const qNum = document.getElementById('q-select').value;
       
       try {
-        // Fetch target and player guess data live from Firebase
-        const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
         const playersSnap = await db.ref('players').once('value');
         const guessesSnap = await db.ref(`guesses/q${qNum}`).once('value');
 
-        const target = targetSnap.val();
-        if (!target || target.lat === undefined || target.lng === undefined) {
-          return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
-        }
-
         const players = playersSnap.val() || {};
         const guesses = guessesSnap.val() || {};
-        const boundsGroup = [];
 
-        // 1. Plot Red Target Pin
-        const targetLatLng = [target.lat, target.lng];
-        const targetMarker = L.marker(targetLatLng, { icon: redIcon })
-          .bindPopup(`<b style="color:red;">CORRECT ANSWER LOCATION</b>`)
-          .addTo(map);
-        
-        currentLayers.push(targetMarker);
-        boundsGroup.push(targetLatLng);
-
-        // 2. Plot Blue Player Pins
         Object.keys(guesses).forEach(playerId => {
           const g = guesses[playerId];
           const player = players[playerId] || { name: 'Anonymous' };
@@ -306,7 +292,6 @@
           if (g && g.lat !== undefined && g.lng !== undefined) {
             const guessLatLng = [g.lat, g.lng];
 
-            // Player Marker
             const pMarker = L.marker(guessLatLng, { icon: blueIcon })
               .bindPopup(`
                 <div style="font-size:18px;">
@@ -317,20 +302,53 @@
               .addTo(map);
 
             currentLayers.push(pMarker);
-            boundsGroup.push(guessLatLng);
+            activeBounds.push(guessLatLng);
           }
         });
 
-        // 3. Smoothly adjust view to fit all pins
-        if (boundsGroup.length > 1) {
-          map.fitBounds(L.latLngBounds(boundsGroup), { padding: [80, 80] });
+        if (activeBounds.length > 1) {
+          map.fitBounds(L.latLngBounds(activeBounds), { padding: [80, 80] });
+        } else if (activeBounds.length === 1) {
+          map.setView(activeBounds[0], 6);
         } else {
-          map.setView(targetLatLng, 10);
+          alert(`No guesses submitted yet for Question ${qNum}!`);
         }
 
       } catch (err) {
         console.error("Error revealing guesses:", err);
         alert("An error occurred while fetching guess data.");
+      }
+    }
+
+    // 2. Reveal Correct Answer Pin (Red Pin)
+    async function revealAnswerPin() {
+      const qNum = document.getElementById('q-select').value;
+
+      try {
+        const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
+        const target = targetSnap.val();
+
+        if (!target || target.lat === undefined || target.lng === undefined) {
+          return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
+        }
+
+        const targetLatLng = [target.lat, target.lng];
+        const targetMarker = L.marker(targetLatLng, { icon: redIcon })
+          .bindPopup(`<b style="color:red;">CORRECT ANSWER LOCATION</b>`)
+          .addTo(map);
+
+        currentLayers.push(targetMarker);
+        activeBounds.push(targetLatLng);
+
+        if (activeBounds.length > 1) {
+          map.fitBounds(L.latLngBounds(activeBounds), { padding: [80, 80] });
+        } else {
+          map.setView(targetLatLng, 10);
+        }
+
+      } catch (err) {
+        console.error("Error revealing target answer:", err);
+        alert("An error occurred while fetching target answer.");
       }
     }
 
