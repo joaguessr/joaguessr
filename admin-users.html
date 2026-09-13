@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admin - Player Account Generator</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f4f4f4; }
+    textarea { width: 100%; height: 150px; padding: 10px; font-size: 15px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
+    button { background: #00d26a; border: none; color: white; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+    .card { border: 2px dashed #bbb; padding: 15px; margin: 10px; display: inline-block; text-align: center; border-radius: 8px; background: #fff; width: 220px; vertical-align: top; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+  <h2>Batch Account & QR Code Generator</h2>
+  <p>Format each line like this: <code>Name | Custom Welcome Message</code></p>
+  <textarea id="userData" placeholder="Alex | Welcome Alex! Ready to show off your map skills?&#10;Sam | Hey Sam! Hope you brought your A-game tonight."></textarea>
+  <br>
+  <button onclick="generateCustomAccounts()">Generate Accounts & QR Codes</button>
+  <div id="output" style="margin-top:25px;"></div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
+      authDomain: "joaguessr.firebaseapp.com",
+      databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "joaguessr",
+      storageBucket: "joaguessr.firebasestorage.app",
+      messagingSenderId: "852224945761",
+      appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    async function generateCustomAccounts() {
+      const text = document.getElementById('userData').value.trim();
+      if (!text) return alert("Please enter at least one entry!");
+      
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const baseURL = "https://joaguessr.github.io/joaguessr/index.html?id="; 
+      const outputDiv = document.getElementById('output');
+      outputDiv.innerHTML = "";
+
+      for (let i = 0; i < lines.length; i++) {
+        const parts = lines[i].split('|');
+        const name = parts[0].trim();
+        const customMessage = parts[1] ? parts[1].trim() : `Welcome, ${name}! Ready to play?`;
+        
+        const id = "p_" + Date.now() + "_" + i;
+
+        await db.ref('players/' + id).set({
+          name: name,
+          welcomeMsg: customMessage,
+          score: 0
+        });
+
+        const userURL = baseURL + id;
+        const qrImageURL = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(userURL)}`;
+
+        outputDiv.innerHTML += `
+          <div class="card">
+            <h3 style="margin:5px 0;">${name}</h3>
+            <p style="font-size:12px; color:#555; height:36px; overflow:hidden;">"${customMessage}"</p>
+            <img src="${qrImageURL}" alt="QR Code"><br>
+            <small style="color:#888;">ID: ${id}</small>
+          </div>
+        `;
+      }
+      alert("Accounts created and saved to Firebase!");
+    }
+  </script>
+</body>
+</html>

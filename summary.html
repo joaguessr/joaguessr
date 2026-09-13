@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Projector Summary & Question Admin</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <style>
+    body, html { margin:0; padding:0; height:100%; width:100%; font-family:sans-serif; background:#111; color:white; }
+    #map { height: 100vh; width: 100vw; }
+    
+    /* Main Control Bar */
+    #admin-bar {
+      position: absolute; top: 15px; left: 15px; z-index: 1000;
+      background: rgba(20, 20, 20, 0.95); color: white;
+      padding: 12px 18px; border-radius: 10px; display: flex;
+      align-items: center; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    }
+
+    /* Target Editor Drawer */
+    #target-editor {
+      position: absolute; top: 75px; left: 15px; z-index: 1000;
+      background: rgba(20, 20, 20, 0.95); color: white;
+      padding: 15px; border-radius: 10px; width: 300px; display: none;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid #444;
+    }
+
+    select, button, input {
+      padding: 8px 12px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold;
+    }
+    select, input { background: #333; color: white; border: 1px solid #555; }
+    button { background: #00d26a; color: white; cursor: pointer; }
+    button:hover { background: #00b058; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+
+    .leaflet-popup-content-wrapper { font-size: 16px; text-align: center; padding: 5px; }
+  </style>
+</head>
+<body>
+
+  <!-- Main Display Controller Bar -->
+  <div id="admin-bar">
+    <label>Question:</label>
+    <select id="q-select" onchange="loadTargetIntoEditor()">
+      <script>
+        for(let i=1; i<=20; i++) {
+          document.write(`<option value="${i}">Q${i}</option>`);
+        }
+      </script>
+    </select>
+    <button onclick="revealQuestionGuesses()">Reveal Map Pins</button>
+    <button class="secondary" onclick="toggleEditor()">⚙️ Set Answers</button>
+  </div>
+
+  <!-- Easy Question Manager Drawer -->
+  <div id="target-editor">
+    <h3 style="margin:0 0 10px 0; font-size:16px; color:#00d26a;">Edit Answer Location</h3>
+    <p style="font-size:12px; color:#aaa; margin-bottom:10px;">Right-click any place on Google Maps to copy coordinates.</p>
+    
+    <label style="font-size:12px;">Latitude:</label>
+    <input type="number" step="any" id="edit-lat" placeholder="e.g. 48.8584" style="width:100%; margin-bottom:8px; box-sizing:border-box;">
+    
+    <label style="font-size:12px;">Longitude:</label>
+    <input type="number" step="any" id="edit-lng" placeholder="e.g. 2.2945" style="width:100%; margin-bottom:12px; box-sizing:border-box;">
+    
+    <button onclick="saveTargetToFirebase()" style="width:100%;">Save Location for Selected Q</button>
+  </div>
+
+  <div id="map"></div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
+      authDomain: "joaguessr.firebaseapp.com",
+      databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "joaguessr",
+      storageBucket: "joaguessr.firebasestorage.app",
+      messagingSenderId: "852224945761",
+      appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const map = L.map('map').setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap &copy; CARTO'
+}).addTo(map);
+
+    let currentLayers = [];
+
+    const redIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    const blueIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    function toggleEditor() {
+      const editor = document.getElementById('target-editor');
+      editor.style.display = editor.style.display === 'block' ? 'none' : 'block';
+      loadTargetIntoEditor();
+    }
+
+    // Load coordinates from Firebase into the inputs
+    async function loadTargetIntoEditor() {
+      const qNum = document.getElementById('q-select').value;
+      const snap = await db.ref(`targetAnswers/q${qNum}`).once('value');
+      const data = snap.val();
+      
+      if (data) {
+        document.getElementById('edit-lat').value = data.lat;
+        document.getElementById('edit-lng').value = data.lng;
+      } else {
+        document.getElementById('edit-lat').value = '';
+        document.getElementById('edit-lng').value = '';
+      }
+    }
+
+    // Save target answer directly to Firebase
+    async function saveTargetToFirebase() {
+      const qNum = document.getElementById('q-select').value;
+      const lat = parseFloat(document.getElementById('edit-lat').value);
+      const lng = parseFloat(document.getElementById('edit-lng').value);
+
+      if (isNaN(lat) || isNaN(lng)) return alert("Please enter valid Latitude and Longitude numbers!");
+
+      await db.ref(`targetAnswers/q${qNum}`).set({ lat, lng });
+      alert(`Target answer for Question ${qNum} saved!`);
+    }
+
+    function clearPreviousLayers() {
+      currentLayers.forEach(layer => map.removeLayer(layer));
+      currentLayers = [];
+    }
+
+    // Reveal player pins and correct location on projector
+    async function revealQuestionGuesses() {
+      clearPreviousLayers();
+
+      const qNum = document.getElementById('q-select').value;
+      
+      // Fetch target and player guess data live from Firebase
+      const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
+      const playersSnap = await db.ref('players').once('value');
+      const guessesSnap = await db.ref('guesses').once('value');
+
+      const target = targetSnap.val();
+      if (!target) return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
+
+      const players = playersSnap.val() || {};
+      const guesses = guessesSnap.val() || {};
+      const boundsGroup = [];
+
+      // 1. Plot Red Target Pin
+      const targetLatLng = [target.lat, target.lng];
+      const targetMarker = L.marker(targetLatLng, { icon: redIcon })
+        .bindPopup(`<b style="color:red;">CORRECT ANSWER LOCATION</b>`)
+        .addTo(map);
+      
+      currentLayers.push(targetMarker);
+      boundsGroup.push(targetLatLng);
+
+      // 2. Plot Anonymous Blue Player Pins
+      Object.keys(guesses).forEach(playerId => {
+        const playerGuesses = guesses[playerId];
+        const player = players[playerId] || { name: 'Anonymous' };
+
+        if (playerGuesses && playerGuesses[`q${qNum}`]) {
+          const g = playerGuesses[`q${qNum}`];
+          const guessLatLng = [g.lat, g.lng];
+
+          // Unlabeled blue pin: Name & distance reveal when host clicks
+          const pMarker = L.marker(guessLatLng, { icon: blueIcon })
+            .bindPopup(`
+              <div style="font-size:18px;">
+                👑 <b>${player.name}</b><br>
+                <span style="font-size:14px; color:#555;">Distance: <b>${g.distanceKm || 0} km</b></span><br>
+                <span style="font-size:14px; color:#00d26a;">+${g.points || 0} pts</span>
+              </div>
+            `)
+            .addTo(map);
+
+          currentLayers.push(pMarker);
+          boundsGroup.push(guessLatLng);
+        }
+      });
+
+      // 3. Smoothly adjust view to fit all pins
+      if (boundsGroup.length > 1) {
+        map.fitBounds(L.latLngBounds(boundsGroup), { padding: [80, 80] });
+      } else {
+        map.setView(targetLatLng, 10);
+      }
+    }
+  </script>
+</body>
+</html>
