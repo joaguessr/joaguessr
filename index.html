@@ -170,6 +170,37 @@
       width: 100%;
       cursor: pointer;
     }
+
+    /* Personal Distance Banner Overlay */
+    #distanceBanner {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      background: rgba(20, 20, 20, 0.95);
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 14px 20px;
+      width: 90%;
+      max-width: 380px;
+      text-align: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      display: none;
+    }
+
+    .dist-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #00d26a;
+      margin-bottom: 4px;
+    }
+
+    .dist-sub {
+      font-size: 14px;
+      color: #3498db;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -199,7 +230,7 @@
         <span class="player-name" id="displayName">Player</span>
         <span class="edit-icon">✏️</span>
       </div>
-      <div class="game-status" id="displayStatus">Q: 1/20 | Score: 0</div>
+      <div class="game-status" id="displayStatus">Q: 1/20</div>
     </div>
     <div id="action-area">
       <button id="submitBtn" disabled>Submit Guess</button>
@@ -207,6 +238,12 @@
   </div>
 
   <div id="map"></div>
+
+  <!-- Real-time Personal Distance Display -->
+  <div id="distanceBanner">
+    <div id="roundDistanceText" class="dist-title">📍 Distance: -- km</div>
+    <div id="totalDistanceText" class="dist-sub">🏆 Total: -- km</div>
+  </div>
 </div>
 
 <!-- Leaflet JS -->
@@ -245,13 +282,16 @@
   const welcomeTitle = document.getElementById('welcomeTitle');
   const welcomeMessageText = document.getElementById('welcomeMessageText');
   const submitModal = document.getElementById('submitModal');
+  const distanceBanner = document.getElementById('distanceBanner');
+  const roundDistanceText = document.getElementById('roundDistanceText');
+  const totalDistanceText = document.getElementById('totalDistanceText');
 
   let currentPin = null;
   let selectedCoords = null;
   let currentQuestion = 1;
   let hasSubmittedCurrentQ = false;
   let currentPlayerName = "Player";
-  let currentScore = 0;
+  let distanceRefListener = null;
 
   // 3. MAP SETUP
   const map = L.map('map', {
@@ -288,9 +328,6 @@
     if (data) {
       currentPlayerName = data.name || "Player";
       displayName.textContent = currentPlayerName;
-      
-      currentScore = data.score || 0;
-      updateStatusHeader();
 
       if (data.welcomeMsg && !sessionStorage.getItem('welcomeShown')) {
         welcomeTitle.textContent = `Welcome, ${currentPlayerName}!`;
@@ -301,7 +338,7 @@
   });
 
   function updateStatusHeader() {
-    displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${currentScore}`;
+    displayStatus.textContent = `Q: ${currentQuestion}/20`;
   }
 
   function closeWelcomeModal() {
@@ -345,12 +382,52 @@
     });
   });
 
-  // 7. REAL-TIME QUESTION & STATE SYNC
-  // Listens live to currentQuestion changes set by summary.html
+  // 7. LISTEN FOR REVEALED DISTANCE RESULTS
+  function attachDistanceListener(qNum) {
+    if (distanceRefListener) {
+      distanceRefListener.off();
+    }
+
+    distanceBanner.style.display = 'none';
+
+    distanceRefListener = db.ref(`guesses/q${qNum}/${playerId}/distanceKm`);
+    distanceRefListener.on('value', (snap) => {
+      const dist = snap.val();
+      if (dist !== null && dist !== undefined) {
+        roundDistanceText.innerHTML = `📍 Distance: <b>${dist} km</b> off target!`;
+        distanceBanner.style.display = 'block';
+        
+        calculateCumulativeTotal();
+      }
+    });
+  }
+
+  // 8. CALCULATE CUMULATIVE TOTAL DISTANCE (IN KM) ACROSS ALL QUESTIONS
+  async function calculateCumulativeTotal() {
+    try {
+      const snap = await db.ref('guesses').once('value');
+      const allGuesses = snap.val() || {};
+      let totalKm = 0;
+
+      Object.keys(allGuesses).forEach(qKey => {
+        const playerGuess = allGuesses[qKey][playerId];
+        if (playerGuess && playerGuess.distanceKm !== undefined) {
+          totalKm += Number(playerGuess.distanceKm);
+        }
+      });
+
+      totalDistanceText.innerHTML = `🏆 Cumulative Total: <b>${totalKm.toFixed(2)} km</b>`;
+    } catch (err) {
+      console.error("Error calculating cumulative total:", err);
+    }
+  }
+
+  // 9. REAL-TIME QUESTION & STATE SYNC
   db.ref('gameState/currentQuestion').on('value', (snapshot) => {
     const activeQ = snapshot.val() || 1;
     currentQuestion = activeQ;
     updateStatusHeader();
+    attachDistanceListener(currentQuestion);
 
     // Reset Map Pin and Controls for the updated active question
     if (currentPin) {

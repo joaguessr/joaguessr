@@ -321,37 +321,71 @@
     }
 
     // 2. Reveal Correct Answer Pin (Red Pin)
-    async function revealAnswerPin() {
-      const qNum = document.getElementById('q-select').value;
+// Reveal Correct Answer Pin (Red Pin) & Calculate Distances
+async function revealAnswerPin() {
+  const qNum = document.getElementById('q-select').value;
 
-      try {
-        const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
-        const target = targetSnap.val();
+  try {
+    const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
+    const target = targetSnap.val();
 
-        if (!target || target.lat === undefined || target.lng === undefined) {
-          return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
-        }
-
-        const targetLatLng = [target.lat, target.lng];
-        const targetMarker = L.marker(targetLatLng, { icon: redIcon })
-          .bindPopup(`<b style="color:red;">CORRECT ANSWER LOCATION</b>`)
-          .addTo(map);
-
-        currentLayers.push(targetMarker);
-        activeBounds.push(targetLatLng);
-
-        if (activeBounds.length > 1) {
-          map.fitBounds(L.latLngBounds(activeBounds), { padding: [80, 80] });
-        } else {
-          map.setView(targetLatLng, 10);
-        }
-
-      } catch (err) {
-        console.error("Error revealing target answer:", err);
-        alert("An error occurred while fetching target answer.");
-      }
+    if (!target || target.lat === undefined || target.lng === undefined) {
+      return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
     }
 
+    const targetLatLng = L.latLng(target.lat, target.lng);
+    const targetMarker = L.marker([target.lat, target.lng], { icon: redIcon })
+      .bindPopup(`<b style="color:red;">CORRECT ANSWER LOCATION</b>`)
+      .addTo(map);
+
+    currentLayers.push(targetMarker);
+    activeBounds.push([target.lat, target.lng]);
+
+    // Fetch players and guesses to compute distances
+    const playersSnap = await db.ref('players').once('value');
+    const guessesSnap = await db.ref(`guesses/q${qNum}`).once('value');
+    const players = playersSnap.val() || {};
+    const guesses = guessesSnap.val() || {};
+
+    // Re-render player pins with distance included ONLY in their click popup
+    Object.keys(guesses).forEach(playerId => {
+      const g = guesses[playerId];
+      const player = players[playerId] || { name: 'Anonymous' };
+
+      if (g && g.lat !== undefined && g.lng !== undefined) {
+        const guessLatLng = L.latLng(g.lat, g.lng);
+        
+        // Distance in Kilometers
+        const distKm = (targetLatLng.distanceTo(guessLatLng) / 1000).toFixed(2);
+
+        // Save calculated distance to Firebase so index.html can read it directly
+        db.ref(`guesses/q${qNum}/${playerId}/distanceKm`).set(parseFloat(distKm));
+
+        // Update popup text on summary screen (only visible when admin/user clicks the pin)
+        const pMarker = L.marker([g.lat, g.lng], { icon: blueIcon })
+          .bindPopup(`
+            <div style="font-size:16px;">
+              👑 <b>${player.name}</b><br>
+              <span style="font-size:13px; color:#555;">Off by: <b>${distKm} km</b></span>
+            </div>
+          `)
+          .addTo(map);
+
+        currentLayers.push(pMarker);
+      }
+    });
+
+    if (activeBounds.length > 1) {
+      map.fitBounds(L.latLngBounds(activeBounds), { padding: [80, 80] });
+    } else {
+      map.setView([target.lat, target.lng], 10);
+    }
+
+  } catch (err) {
+    console.error("Error revealing target answer:", err);
+    alert("An error occurred while fetching target answer.");
+  }
+}
     // Initial sync on page load
     loadTargetIntoEditor();
   </script>
