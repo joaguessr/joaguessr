@@ -1,200 +1,222 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GeoGuessr Mobile Player</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JoaGuessr - Player</title>
+  
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  
   <style>
-    body, html { margin:0; padding:0; height:100%; width:100%; font-family:sans-serif; background:#111; color:white; }
-    #map { height: calc(100% - 70px); width: 100vw; }
-    #ui { height: 70px; background: #1a1a1a; display:flex; align-items:center; justify-content:space-between; padding:0 15px; box-sizing:border-box; border-top: 1px solid #333; }
-    button { background:#00d26a; border:none; color:white; padding:10px 16px; font-weight:bold; border-radius:6px; font-size:14px; cursor:pointer; }
-    button:disabled { background:#555; cursor:not-allowed; }
-    .score-badge { font-size:13px; color:#aaa; }
-    .modal { position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); z-index:9999; display:flex; align-items:center; justify-content:center; }
-    .modal-box { background:#222; padding:25px; border-radius:12px; width:85%; max-width:340px; text-align:center; color:white; border: 1px solid #444; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+    }
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+    /* Header Bar */
+    #header {
+      height: 60px;
+      background-color: #1e1e1e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid #333;
+      z-index: 1000;
+    }
+    .player-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .player-name {
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .game-status {
+      font-size: 12px;
+      color: #aaa;
+    }
+    /* Action Area */
+    #action-area {
+      display: flex;
+      align-items: center;
+    }
+    #submitBtn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #submitBtn:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+    #submittedMsg {
+      display: none;
+      color: #4CAF50;
+      font-weight: bold;
+      font-size: 14px;
+      text-align: right;
+    }
+    /* Map Container */
+    #map {
+      flex: 1;
+      width: 100%;
+      background: #222;
+    }
   </style>
 </head>
 <body>
 
-  <!-- Onboarding Welcome Modal -->
-  <div id="welcome-modal" class="modal">
-    <div class="modal-box">
-      <h2 id="welcome-header" style="margin-top:0; color:#00d26a;">Welcome!</h2>
-      <p id="welcome-msg" style="color:#ccc; font-size:14px; margin-bottom:15px;"></p>
-      <input type="text" id="name-input" style="width:100%; padding:10px; border:1px solid #555; background:#333; color:white; border-radius:6px; text-align:center; font-size:16px; box-sizing:border-box; margin-bottom:15px;" />
-      <button onclick="startGame()" style="width:100%; padding:12px;">Start Game (Q1/20)</button>
+<div id="app-container">
+  <div id="header">
+    <div class="player-info">
+      <div class="player-name" id="displayName">Player</div>
+      <div class="game-status" id="displayStatus">Q: 1/20 | Score: 0</div>
+    </div>
+    <div id="action-area">
+      <button id="submitBtn" disabled>Submit Guess</button>
+      <span id="submittedMsg">Your guess has been submitted</span>
     </div>
   </div>
-
-  <!-- Header UI -->
-  <div id="ui">
-    <div>
-      <div id="player-display" style="font-weight:bold;">Player</div>
-      <div class="score-badge">Q: <span id="q-num">1</span>/20 | Score: <span id="total-score">0</span></div>
-    </div>
-    <button id="action-btn" onclick="submitGuess()">Submit Guess</button>
-  </div>
-
-  <!-- Map Display -->
   <div id="map"></div>
+</div>
 
-  <script>
-    // Replace with your actual Firebase Configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
-      authDomain: "joaguessr.firebaseapp.com",
-      databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "joaguessr",
-      storageBucket: "joaguessr.firebasestorage.app",
-      messagingSenderId: "852224945761",
-      appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
-    };
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Firebase SDKs (Compat version for lightweight implementation) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<script>
+  // 1. FIREBASE CONFIGURATION (Replace with your Firebase details if different)
+  const firebaseConfig = {
+    databaseURL: "https://joaguessr-default-rtdb.firebaseio.com" // Update if using a custom DB URL
+  };
+  
+  if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+  }
+  const db = firebase.database();
 
-    let currentQ = 0;
-    let totalScore = 0;
-    let guessMarker = null;
-    let targetMarker = null;
-    let resultLine = null;
-    let isLocked = false;
+  // 2. PARSE USER ID FROM URL (?id=p_123456)
+  const urlParams = new URLSearchParams(window.location.search);
+  const playerId = urlParams.get('id') || 'guest_' + Math.floor(Math.random() * 1000);
 
-    // Grab player ID from URL parameters (?id=...)
-    const urlParams = new URLSearchParams(window.location.search);
-    const playerId = urlParams.get('id') || 'guest_' + Date.now();
+  // UI Elements
+  const submitBtn = document.getElementById('submitBtn');
+  const submittedMsg = document.getElementById('submittedMsg');
+  const displayName = document.getElementById('displayName');
+  const displayStatus = document.getElementById('displayStatus');
 
-    // Fetch Personalized Account Info
-    db.ref('players/' + playerId).once('value', snap => {
-      const data = snap.val() || {};
-      document.getElementById('welcome-header').innerText = `Hey ${data.name || 'Explorer'}! 👋`;
-      document.getElementById('welcome-msg').innerText = data.welcomeMsg || "Ready to test your location knowledge across 20 photos?";
-      document.getElementById('name-input').value = data.name || "Player";
+  let currentPin = null;
+  let selectedCoords = null;
+  let currentQuestion = 1;
+  let hasSubmittedCurrentQ = false;
+
+  // 3. INITIALIZE LEAFLET MAP (Fixes "API KEY REQUIRED" background issue)
+  const map = L.map('map', {
+    zoomControl: true
+  }).setView([1.3521, 103.8198], 12); // Default centered on Singapore
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Map Click Event to Place/Move Pin
+  map.on('click', function(e) {
+    if (hasSubmittedCurrentQ) return; // Lock pin placement if already submitted
+
+    selectedCoords = {
+      lat: e.latlng.lat,
+      lng: e.latlng.lng
+    };
+
+    if (currentPin) {
+      currentPin.setLatLng(e.latlng);
+    } else {
+      currentPin = L.marker(e.latlng).addTo(map);
+    }
+
+    submitBtn.disabled = false;
+  });
+
+  // 4. SUBMIT GUESS LOGIC
+  submitBtn.addEventListener('click', function() {
+    if (!selectedCoords || hasSubmittedCurrentQ) return;
+
+    // Save guess to Firebase under player's record
+    db.ref(`guesses/q${currentQuestion}/${playerId}`).set({
+      lat: selectedCoords.lat,
+      lng: selectedCoords.lng,
+      timestamp: Date.now()
+    }).then(() => {
+      hasSubmittedCurrentQ = true;
+
+      // Update UI: Hide button, show success message
+      submitBtn.style.display = 'none';
+      submittedMsg.style.display = 'inline';
+    }).catch((err) => {
+      alert("Error submitting guess. Please try again.");
+      console.error(err);
     });
+  });
 
-    // Initialize Interactive Leaflet Map
-    const map = L.map('map').setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19,
-  attribution: '&copy; OpenStreetMap &copy; CARTO'
-}).addTo(map);
+  // 5. LISTEN FOR GAME STATE CHANGES (Syncs question number and score)
+  db.ref('gameState').on('value', (snapshot) => {
+    const data = snapshot.val() || {};
+    const newQ = data.currentQuestion || 1;
 
-    // Drop Pin Event
-    map.on('click', (e) => {
-      if (isLocked) return;
-      if (guessMarker) map.removeLayer(guessMarker);
-      guessMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
-    });
+    // Reset interface if host advances to a new question
+    if (newQ !== currentQuestion) {
+      currentQuestion = newQ;
+      hasSubmittedCurrentQ = false;
+      selectedCoords = null;
 
-    function startGame() {
-      const name = document.getElementById('name-input').value.trim() || 'Player';
-      db.ref('players/' + playerId + '/name').set(name);
-      document.getElementById('player-display').innerText = name;
-      document.getElementById('welcome-modal').style.display = 'none';
-    }
-
-    // Mathematical Haversine Distance & Scoring Logic
-    function calculatePoints(lat1, lon1, lat2, lon2) {
-      const R = 6371; // Earth's radius in KM
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      const dist = R * c;
-      const points = Math.round(5000 * Math.exp(-dist / 2000));
-      return { dist: Math.round(dist), points: points };
-    }
-
-    function getDistanceFeedback(distKm) {
-      if (distKm <= 10) return "🎯 BULLSEYE! Are you standing right there?!";
-      if (distKm <= 100) return "🔥 Incredibly close! You really know this spot.";
-      if (distKm <= 500) return "👏 Great guess! Same region/country!";
-      if (distKm <= 2000) return "✈️ Not bad, but you're a flight away.";
-      if (distKm <= 5000) return "🌍 Right continent, wrong area!";
-      return "👽 Lost in space! Thousands of miles off!";
-    }
-
-    // Submit Guess & Handle State Transitions
-    async function submitGuess() {
-      const btn = document.getElementById('action-btn');
-
-      if (!isLocked) {
-        if (!guessMarker) return alert("Drop a pin on the map first!");
-        
-        btn.disabled = true;
-
-        // Dynamic Firebase Fetch for Target Coordinates
-        const targetSnap = await db.ref(`targetAnswers/q${currentQ + 1}`).once('value');
-        const target = targetSnap.val();
-
-        if (!target) {
-          btn.disabled = false;
-          return alert(`The host has not set the target coordinates for Question ${currentQ + 1} yet!`);
-        }
-
-        isLocked = true;
-        btn.disabled = false;
-        const guess = guessMarker.getLatLng();
-
-        // Reveal Correct Location Red Pin
-        targetMarker = L.marker([target.lat, target.lng], {
-          icon: L.icon({ 
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', 
-            iconSize: [25, 41],
-            iconAnchor: [12, 41] 
-          })
-        }).addTo(map);
-
-        // Draw Connecting Line Between Guess and Actual Location
-        resultLine = L.polyline([[guess.lat, guess.lng], [target.lat, target.lng]], {
-          color: '#f44336', weight: 3, dashArray: '5, 10'
-        }).addTo(map);
-        
-        map.fitBounds(resultLine.getBounds(), { padding: [40, 40] });
-
-        // Calculate Score & Push Results to Database
-        const res = calculatePoints(guess.lat, guess.lng, target.lat, target.lng);
-        totalScore += res.points;
-        document.getElementById('total-score').innerText = totalScore;
-
-        db.ref(`guesses/${playerId}/q${currentQ + 1}`).set({
-          lat: guess.lat,
-          lng: guess.lng,
-          distanceKm: res.dist,
-          points: res.points
-        });
-        db.ref(`players/${playerId}/score`).set(totalScore);
-
-        alert(`${getDistanceFeedback(res.dist)}\n\nDistance: ${res.dist} km\nScore Earned: +${res.points} pts`);
-
-        btn.innerText = (currentQ < 19) ? "Next Photo" : "Finish Game";
-        btn.style.background = "#008cba";
-      } else {
-        // Reset Map for Next Question
-        if (targetMarker) map.removeLayer(targetMarker);
-        if (guessMarker) map.removeLayer(guessMarker);
-        if (resultLine) map.removeLayer(resultLine);
-        guessMarker = null;
-        isLocked = false;
-
-        currentQ++;
-        if (currentQ < 20) {
-          document.getElementById('q-num').innerText = currentQ + 1;
-          btn.innerText = "Submit Guess";
-          btn.style.background = "#00d26a";
-          map.setView([20, 0], 2);
-        } else {
-          alert(`🎉 Game Over! Final Score: ${totalScore} / 100,000`);
-          btn.style.display = 'none';
-        }
+      if (currentPin) {
+        map.removeLayer(currentPin);
+        currentPin = null;
       }
+
+      // Restore submit button for the new round
+      submitBtn.style.display = 'inline-block';
+      submitBtn.disabled = true;
+      submittedMsg.style.display = 'none';
     }
-  </script>
+
+    // Update status bar header
+    db.ref(`players/${playerId}`).once('value', (playerSnap) => {
+      const playerData = playerSnap.val() || {};
+      const name = playerData.name || playerId;
+      const score = playerData.score || 0;
+
+      displayName.textContent = name;
+      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${score}`;
+    });
+  });
+</script>
+
 </body>
 </html>

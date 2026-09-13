@@ -45,7 +45,7 @@
   <!-- Main Display Controller Bar -->
   <div id="admin-bar">
     <label>Question:</label>
-    <select id="q-select" onchange="loadTargetIntoEditor()">
+    <select id="q-select" onchange="onQuestionChange()">
       <script>
         for(let i=1; i<=20; i++) {
           document.write(`<option value="${i}">Q${i}</option>`);
@@ -86,10 +86,12 @@
     const db = firebase.database();
 
     const map = L.map('map').setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19,
-  attribution: '&copy; OpenStreetMap &copy; CARTO'
-}).addTo(map);
+    
+    // CartoDB Voyager tiles prevent 403 access and watermark issues
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
 
     let currentLayers = [];
 
@@ -109,6 +111,14 @@
       const editor = document.getElementById('target-editor');
       editor.style.display = editor.style.display === 'block' ? 'none' : 'block';
       loadTargetIntoEditor();
+    }
+
+    // Broadcast question change to mobile players
+    function onQuestionChange() {
+      const qNum = parseInt(document.getElementById('q-select').value, 10);
+      db.ref('gameState/currentQuestion').set(qNum);
+      loadTargetIntoEditor();
+      clearPreviousLayers();
     }
 
     // Load coordinates from Firebase into the inputs
@@ -152,7 +162,7 @@
       // Fetch target and player guess data live from Firebase
       const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
       const playersSnap = await db.ref('players').once('value');
-      const guessesSnap = await db.ref('guesses').once('value');
+      const guessesSnap = await db.ref(`guesses/q${qNum}`).once('value');
 
       const target = targetSnap.val();
       if (!target) return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
@@ -170,22 +180,19 @@
       currentLayers.push(targetMarker);
       boundsGroup.push(targetLatLng);
 
-      // 2. Plot Anonymous Blue Player Pins
+      // 2. Plot Blue Player Pins
       Object.keys(guesses).forEach(playerId => {
-        const playerGuesses = guesses[playerId];
+        const g = guesses[playerId];
         const player = players[playerId] || { name: 'Anonymous' };
 
-        if (playerGuesses && playerGuesses[`q${qNum}`]) {
-          const g = playerGuesses[`q${qNum}`];
+        if (g && g.lat && g.lng) {
           const guessLatLng = [g.lat, g.lng];
 
-          // Unlabeled blue pin: Name & distance reveal when host clicks
           const pMarker = L.marker(guessLatLng, { icon: blueIcon })
             .bindPopup(`
               <div style="font-size:18px;">
                 👑 <b>${player.name}</b><br>
-                <span style="font-size:14px; color:#555;">Distance: <b>${g.distanceKm || 0} km</b></span><br>
-                <span style="font-size:14px; color:#00d26a;">+${g.points || 0} pts</span>
+                <span style="font-size:14px; color:#555;">Submitted Guess</span>
               </div>
             `)
             .addTo(map);
