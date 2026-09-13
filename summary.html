@@ -1,251 +1,255 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>JoaGuessr - Admin & Summary Dashboard</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Projector Summary & Question Admin</title>
   
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body, html { width: 100%; height: 100%; font-family: sans-serif; background: #121212; color: #fff; overflow: hidden; }
-    #map { width: 100vw; height: 100vh; z-index: 1; }
+    body, html { margin:0; padding:0; height:100%; width:100%; font-family:sans-serif; background:#111; color:white; overflow:hidden; }
+    #map { height: 100vh; width: 100vw; z-index: 1; }
     
-    /* Top Control Bar */
+    /* Main Control Bar */
     #admin-bar {
-      position: absolute;
-      top: 15px; left: 15px;
-      z-index: 1000;
-      background: rgba(30, 30, 30, 0.95);
-      padding: 10px 16px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      position: absolute; top: 15px; left: 15px; z-index: 1000;
+      background: rgba(20, 20, 20, 0.95); color: white;
+      padding: 12px 18px; border-radius: 10px; display: flex;
+      align-items: center; gap: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.6);
       border: 1px solid #333;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
-    select, button {
-      padding: 8px 14px;
-      font-size: 14px;
-      font-weight: bold;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-    }
-    select { background: #2a2a2a; color: white; border: 1px solid #444; }
-    .btn-reveal { background: #00d26a; color: white; }
-    .btn-settings { background: #333; color: white; border: 1px solid #555; }
 
-    /* Modal for Editing Answers */
-    #answerModal {
-      position: absolute;
-      top: 75px; left: 15px;
-      z-index: 1000;
-      background: #1e1e1e;
-      padding: 20px;
-      border-radius: 10px;
-      width: 320px;
-      border: 1px solid #333;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
-      display: none;
+    /* Target Editor Drawer */
+    #target-editor {
+      position: absolute; top: 75px; left: 15px; z-index: 1000;
+      background: rgba(20, 20, 20, 0.95); color: white;
+      padding: 15px; border-radius: 10px; width: 300px; display: none;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid #444;
     }
-    #answerModal h3 { color: #00d26a; margin-bottom: 10px; font-size: 16px; }
-    #answerModal label { font-size: 12px; color: #aaa; display: block; margin-top: 8px; }
-    #answerModal input {
-      width: 100%; padding: 8px; margin-top: 4px;
-      background: #2a2a2a; border: 1px solid #444; color: white; border-radius: 4px;
+
+    select, button, input {
+      padding: 8px 12px; font-size: 14px; border-radius: 6px; border: none; font-weight: bold;
     }
-    #answerModal button { width: 100%; margin-top: 15px; background: #00d26a; color: white; }
+    select, input { background: #333; color: white; border: 1px solid #555; }
+    button { background: #00d26a; color: white; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #00b058; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+
+    .leaflet-popup-content-wrapper { font-size: 16px; text-align: center; padding: 5px; }
   </style>
 </head>
 <body>
 
-<div id="admin-bar">
-  <label style="font-size:14px; font-weight:bold;">Question:</label>
-  <select id="questionSelect">
-    <option value="q1">Q1</option>
-    <option value="q2">Q2</option>
-    <option value="q3">Q3</option>
-    <option value="q4">Q4</option>
-    <option value="q5">Q5</option>
-  </select>
-  <button class="btn-reveal" onclick="revealMapPins()">Reveal Map Pins</button>
-  <button class="btn-settings" onclick="toggleAnswerModal()">⚙️ Set Answers</button>
-</div>
+  <!-- Main Display Controller Bar -->
+  <div id="admin-bar">
+    <label>Question:</label>
+    <select id="q-select" onchange="onQuestionChange()">
+      <script>
+        for(let i=1; i<=20; i++) {
+          document.write(`<option value="${i}">Q${i}</option>`);
+        }
+      </script>
+    </select>
+    <button onclick="revealQuestionGuesses()">Reveal Map Pins</button>
+    <button class="secondary" onclick="toggleEditor()">⚙️ Set Answers</button>
+  </div>
 
-<!-- Answer Config Modal -->
-<div id="answerModal">
-  <h3>Edit Answer Location</h3>
-  <p style="font-size:11px; color:#888;">Coordinates auto-clear if no answer is saved for the selected question.</p>
-  
-  <label>Latitude:</label>
-  <input type="text" id="latInput" placeholder="e.g. 1.2926">
-  
-  <label>Longitude:</label>
-  <input type="text" id="lngInput" placeholder="e.g. 103.8552">
-  
-  <button onclick="saveAnswerLocation()">Save Location for Selected Q</button>
-</div>
-
-<div id="map"></div>
-
-<!-- Leaflet & Firebase SDKs -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-<script>
-  // 1. FIREBASE CONFIG
-  const firebaseConfig = {
-    apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
-    authDomain: "joaguessr.firebaseapp.com",
-    databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "joaguessr",
-    storageBucket: "joaguessr.firebasestorage.app",
-    messagingSenderId: "852224945761",
-    appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
-  };
-  
-  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
-
-  // 2. MAP SETUP
-  const map = L.map('map').setView([1.3521, 103.8198], 2);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
-  let revealLayerGroup = L.layerGroup().addTo(map);
-
-  // 3. DROPDOWN CHANGE LISTENER (Fixes persistent Lat/Lng issue)
-  const questionSelect = document.getElementById('questionSelect');
-  questionSelect.addEventListener('change', loadAnswerForSelectedQ);
-
-  function loadAnswerForSelectedQ() {
-    const selectedQ = questionSelect.value; // "q1", "q2", etc.
+  <!-- Easy Question Manager Drawer -->
+  <div id="target-editor">
+    <h3 style="margin:0 0 10px 0; font-size:16px; color:#00d26a;">Edit Answer Location</h3>
+    <p style="font-size:12px; color:#aaa; margin-bottom:10px;">Right-click any place on Google Maps to copy coordinates.</p>
     
-    // Update global game state so player screens reflect the question change
-    db.ref('gameState/currentQuestion').set(parseInt(selectedQ.replace('q', '')));
+    <label style="font-size:12px;">Latitude:</label>
+    <input type="number" step="any" id="edit-lat" placeholder="e.g. 48.8584" style="width:100%; margin-bottom:8px; box-sizing:border-box;">
+    
+    <label style="font-size:12px;">Longitude:</label>
+    <input type="number" step="any" id="edit-lng" placeholder="e.g. 2.2945" style="width:100%; margin-bottom:12px; box-sizing:border-box;">
+    
+    <button onclick="saveTargetToFirebase()" style="width:100%;">Save Location for Selected Q</button>
+  </div>
 
-    // Clear previous map markers
-    revealLayerGroup.clearLayers();
+  <div id="map"></div>
 
-    // Check Firebase for existing coordinates
-    db.ref(`answers/${selectedQ}`).once('value', (snap) => {
-      const data = snap.val();
-      if (data && data.lat && data.lng) {
-        document.getElementById('latInput').value = data.lat;
-        document.getElementById('lngInput').value = data.lng;
-      } else {
-        // Clear input fields if no answer location exists for this question
-        document.getElementById('latInput').value = '';
-        document.getElementById('lngInput').value = '';
-      }
-    });
-  }
-
-  function toggleAnswerModal() {
-    const modal = document.getElementById('answerModal');
-    modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
-    if (modal.style.display === 'block') {
-      loadAnswerForSelectedQ();
+  <script>
+    // 1. FIREBASE INITIALIZATION
+    const firebaseConfig = {
+      apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
+      authDomain: "joaguessr.firebaseapp.com",
+      databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "joaguessr",
+      storageBucket: "joaguessr.firebasestorage.app",
+      messagingSenderId: "852224945761",
+      appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
+    };
+    
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
     }
-  }
+    const db = firebase.database();
 
-  // 4. SAVE ANSWER COORDINATES TO FIREBASE
-  function saveAnswerLocation() {
-    const selectedQ = questionSelect.value;
-    const lat = parseFloat(document.getElementById('latInput').value.trim());
-    const lng = parseFloat(document.getElementById('lngInput').value.trim());
+    // 2. LEAFLET MAP SETUP
+    const map = L.map('map').setView([20, 0], 2);
+    
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri'
+    }).addTo(map);
 
-    if (isNaN(lat) || isNaN(lng)) {
-      return alert("Please enter valid numeric latitude and longitude values.");
+    let currentLayers = [];
+
+    // Custom Marker Icons
+    const redIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    const blueIcon = L.icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+      iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+    });
+
+    function toggleEditor() {
+      const editor = document.getElementById('target-editor');
+      editor.style.display = editor.style.display === 'block' ? 'none' : 'block';
+      if (editor.style.display === 'block') {
+        loadTargetIntoEditor();
+      }
     }
 
-    db.ref(`answers/${selectedQ}`).set({ lat: lat, lng: lng }).then(() => {
-      alert(`Answer for ${selectedQ.toUpperCase()} saved successfully!`);
-      document.getElementById('answerModal').style.display = 'none';
-    });
-  }
+    // Broadcast question change to mobile players
+    function onQuestionChange() {
+      const qNum = parseInt(document.getElementById('q-select').value, 10);
+      db.ref('gameState/currentQuestion').set(qNum);
+      loadTargetIntoEditor();
+      clearPreviousLayers();
+    }
 
-  // 5. REVEAL MAP PINS & DRAW DOTTED LINES
-  async function revealMapPins() {
-    const selectedQ = questionSelect.value;
-    revealLayerGroup.clearLayers(); // Clear old markers/lines
-
-    try {
-      // Fetch Answer Location
-      const answerSnap = await db.ref(`answers/${selectedQ}`).once('value');
-      const answerData = answerSnap.val();
-
-      // Fetch Player Guesses
-      const guessesSnap = await db.ref(`guesses/${selectedQ}`).once('value');
-      const guessesData = guessesSnap.val();
-
-      // Fetch Player Names
-      const playersSnap = await db.ref(`players`).once('value');
-      const playersData = playersSnap.val() || {};
-
-      if (!guessesData) {
-        alert(`No guesses found for ${selectedQ.toUpperCase()} yet.`);
-        return;
+    // Load coordinates from Firebase into the inputs
+    async function loadTargetIntoEditor() {
+      try {
+        const qNum = document.getElementById('q-select').value;
+        const snap = await db.ref(`targetAnswers/q${qNum}`).once('value');
+        const data = snap.val();
+        
+        if (data && data.lat !== undefined && data.lng !== undefined) {
+          document.getElementById('edit-lat').value = data.lat;
+          document.getElementById('edit-lng').value = data.lng;
+        } else {
+          // Clear inputs if no coordinates exist for this question
+          document.getElementById('edit-lat').value = '';
+          document.getElementById('edit-lng').value = '';
+        }
+      } catch (err) {
+        console.error("Error loading target answer:", err);
       }
+    }
 
-      const bounds = [];
+    // Save target answer directly to Firebase
+    async function saveTargetToFirebase() {
+      const qNum = document.getElementById('q-select').value;
+      const lat = parseFloat(document.getElementById('edit-lat').value);
+      const lng = parseFloat(document.getElementById('edit-lng').value);
 
-      // A. Render Target Answer Pin (Green Icon/Marker)
-      if (answerData && answerData.lat && answerData.lng) {
-        const targetLatLng = [answerData.lat, answerData.lng];
-        L.marker(targetLatLng)
-          .bindPopup(`<b>Target Location (${selectedQ.toUpperCase()})</b>`)
-          .addTo(revealLayerGroup);
-        bounds.push(targetLatLng);
+      if (isNaN(lat) || isNaN(lng)) return alert("Please enter valid Latitude and Longitude numbers!");
+
+      try {
+        await db.ref(`targetAnswers/q${qNum}`).set({ lat, lng });
+        alert(`Target answer for Question ${qNum} saved!`);
+      } catch (err) {
+        alert("Failed to save answer location. See console for details.");
+        console.error(err);
       }
+    }
 
-      // B. Render Player Pins and Dotted Lines
-      Object.keys(guessesData).forEach((playerId) => {
-        const guess = guessesData[playerId];
-        const player = playersData[playerId] || {};
-        const playerName = player.name || "Player";
+    function clearPreviousLayers() {
+      currentLayers.forEach(layer => map.removeLayer(layer));
+      currentLayers = [];
+    }
 
-        if (guess.lat && guess.lng) {
-          const guessLatLng = [guess.lat, guess.lng];
-          
-          // Player Marker
-          L.marker(guessLatLng)
-            .bindPopup(`<b>${playerName}</b>'s Guess`)
-            .addTo(revealLayerGroup);
-          bounds.push(guessLatLng);
+    // Reveal player pins, target pin, and dotted connecting lines
+    async function revealQuestionGuesses() {
+      clearPreviousLayers();
 
-          // Dotted Line to Answer Location (if answer exists)
-          if (answerData && answerData.lat && answerData.lng) {
-            L.polyline([guessLatLng, [answerData.lat, answerData.lng]], {
+      const qNum = document.getElementById('q-select').value;
+      
+      try {
+        // Fetch target and player guess data live from Firebase
+        const targetSnap = await db.ref(`targetAnswers/q${qNum}`).once('value');
+        const playersSnap = await db.ref('players').once('value');
+        const guessesSnap = await db.ref(`guesses/q${qNum}`).once('value');
+
+        const target = targetSnap.val();
+        if (!target || target.lat === undefined || target.lng === undefined) {
+          return alert(`No answer coordinates set for Question ${qNum}! Use "⚙️ Set Answers" to set it.`);
+        }
+
+        const players = playersSnap.val() || {};
+        const guesses = guessesSnap.val() || {};
+        const boundsGroup = [];
+
+        // 1. Plot Red Target Pin
+        const targetLatLng = [target.lat, target.lng];
+        const targetMarker = L.marker(targetLatLng, { icon: redIcon })
+          .bindPopup(`<b style="color:red;">CORRECT ANSWER LOCATION</b>`)
+          .addTo(map);
+        
+        currentLayers.push(targetMarker);
+        boundsGroup.push(targetLatLng);
+
+        // 2. Plot Blue Player Pins & Dotted Lines
+        Object.keys(guesses).forEach(playerId => {
+          const g = guesses[playerId];
+          const player = players[playerId] || { name: 'Anonymous' };
+
+          if (g && g.lat !== undefined && g.lng !== undefined) {
+            const guessLatLng = [g.lat, g.lng];
+
+            // Player Marker
+            const pMarker = L.marker(guessLatLng, { icon: blueIcon })
+              .bindPopup(`
+                <div style="font-size:18px;">
+                  👑 <b>${player.name}</b><br>
+                  <span style="font-size:14px; color:#555;">Submitted Guess</span>
+                </div>
+              `)
+              .addTo(map);
+
+            // Dotted Polyline between Guess and Target
+            const line = L.polyline([guessLatLng, targetLatLng], {
               color: '#ff4757',
               dashArray: '8, 8',
               weight: 3,
               opacity: 0.8
-            }).addTo(revealLayerGroup);
+            }).addTo(map);
+
+            currentLayers.push(pMarker);
+            currentLayers.push(line);
+            boundsGroup.push(guessLatLng);
           }
+        });
+
+        // 3. Smoothly adjust view to fit all pins
+        if (boundsGroup.length > 1) {
+          map.fitBounds(L.latLngBounds(boundsGroup), { padding: [80, 80] });
+        } else {
+          map.setView(targetLatLng, 10);
         }
-      });
 
-      // Automatically adjust map zoom to display all pins
-      if (bounds.length > 0) {
-        map.fitBounds(bounds, { padding: [50, 50] });
+      } catch (err) {
+        console.error("Error revealing guesses:", err);
+        alert("An error occurred while fetching guess data.");
       }
-
-    } catch (err) {
-      console.error("Error revealing pins:", err);
-      alert("Error fetching data from Firebase. Check browser console.");
     }
-  }
 
-  // Initial load
-  loadAnswerForSelectedQ();
-</script>
-
+    // Initial sync on page load
+    loadTargetIntoEditor();
+  </script>
 </body>
 </html>
