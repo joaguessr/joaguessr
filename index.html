@@ -14,13 +14,14 @@
       margin: 0;
       padding: 0;
     }
-    body, html {
+    html, body {
       width: 100%;
       height: 100%;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #121212;
       color: #ffffff;
+      position: fixed; /* Prevents whole-page scrolling on mobile devices */
     }
     #app-container {
       display: flex;
@@ -28,9 +29,11 @@
       height: 100vh;
       width: 100vw;
     }
-    /* Header Bar */
+    
+    /* Sticky Top Header Bar */
     #header {
       height: 60px;
+      min-height: 60px;
       background-color: #1e1e1e;
       display: flex;
       justify-content: space-between;
@@ -38,10 +41,12 @@
       padding: 0 16px;
       border-bottom: 1px solid #333;
       z-index: 1000;
+      flex-shrink: 0; /* Prevents header from collapsing when map is touched */
     }
     .player-info {
       display: flex;
       flex-direction: column;
+      justify-content: center;
     }
     .player-name-container {
       display: flex;
@@ -62,8 +67,10 @@
     .game-status {
       font-size: 12px;
       color: #aaa;
+      margin-top: 2px;
     }
-    /* Action Area */
+    
+    /* Action Area in Header */
     #action-area {
       display: flex;
       align-items: center;
@@ -80,21 +87,25 @@
       transition: background 0.2s ease;
     }
     #submitBtn:disabled {
-      background-color: #555;
+      background-color: #444;
+      color: #888;
       cursor: not-allowed;
     }
     #submittedMsg {
       display: none;
       color: #00d26a;
       font-weight: bold;
-      font-size: 14px;
+      font-size: 13px;
       text-align: right;
     }
-    /* Map Container */
+
+    /* Map Container filling remaining viewport space */
     #map {
       flex: 1;
       width: 100%;
+      height: calc(100vh - 60px);
       background: #222;
+      z-index: 1;
     }
     
     /* Welcome Popup Modal */
@@ -154,6 +165,7 @@
 </div>
 
 <div id="app-container">
+  <!-- Header remains locked at the top -->
   <div id="header">
     <div class="player-info">
       <div class="player-name-container" onclick="changePlayerName()">
@@ -167,18 +179,19 @@
       <span id="submittedMsg">Your guess has been submitted</span>
     </div>
   </div>
+
   <div id="map"></div>
 </div>
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- Firebase SDK (v8 to match summary and admin tools) -->
+<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
 <script>
-  // 1. FIREBASE CONFIGURATION (Matches admin-users and summary database URL)
+  // 1. FIREBASE CONFIGURATION
   const firebaseConfig = {
     apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
     authDomain: "joaguessr.firebaseapp.com",
@@ -198,7 +211,7 @@
   const urlParams = new URLSearchParams(window.location.search);
   const playerId = urlParams.get('id') || 'guest_' + Math.floor(Math.random() * 1000);
 
-  // UI References
+  // UI Elements
   const submitBtn = document.getElementById('submitBtn');
   const submittedMsg = document.getElementById('submittedMsg');
   const displayName = document.getElementById('displayName');
@@ -213,7 +226,7 @@
   let hasSubmittedCurrentQ = false;
   let currentPlayerName = "Player";
 
-  // 3. MAP SETUP (OpenStreetMap Standard Tile Layer)
+  // 3. MAP SETUP
   const map = L.map('map', {
     zoomControl: true
   }).setView([1.3521, 103.8198], 12);
@@ -223,9 +236,9 @@
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Place/Move Pin Event
+  // Allow choosing and moving pins freely prior to submission
   map.on('click', function(e) {
-    if (hasSubmittedCurrentQ) return;
+    if (hasSubmittedCurrentQ) return; // Disallow changes after submission
 
     selectedCoords = {
       lat: e.latlng.lat,
@@ -238,6 +251,7 @@
       currentPin = L.marker(e.latlng).addTo(map);
     }
 
+    // Enable button once a location is chosen
     submitBtn.disabled = false;
   });
 
@@ -248,10 +262,9 @@
       currentPlayerName = data.name || "Player";
       displayName.textContent = currentPlayerName;
       
-      // Display score
-      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${data.score || 0}`;
+      const currentScore = data.score || 0;
+      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${currentScore}`;
 
-      // Show welcome popup once if welcome message exists and hasn't been closed
       if (data.welcomeMsg && !sessionStorage.getItem('welcomeShown')) {
         welcomeTitle.textContent = `Welcome, ${currentPlayerName}!`;
         welcomeMessageText.textContent = data.welcomeMsg;
@@ -285,21 +298,20 @@
     }).then(() => {
       hasSubmittedCurrentQ = true;
 
-      // Hide button and display message
+      // Hide Submit Button and show Confirmation text (Header stays completely intact)
       submitBtn.style.display = 'none';
-      submittedMsg.style.display = 'inline';
+      submittedMsg.style.display = 'inline-block';
     }).catch((err) => {
       alert("Error submitting guess. Please try again.");
       console.error(err);
     });
   });
 
-  // 7. LISTEN FOR GAME STATE CHANGES
+  // 7. RESET STATE WHEN HOST MOVES TO NEW QUESTION
   db.ref('gameState').on('value', (snapshot) => {
     const data = snapshot.val() || {};
     const newQ = data.currentQuestion || 1;
 
-    // Reset pin and submit button when host moves to new question
     if (newQ !== currentQuestion) {
       currentQuestion = newQ;
       hasSubmittedCurrentQ = false;
@@ -310,11 +322,14 @@
         currentPin = null;
       }
 
+      // Reset action area controls for the next question
       submitBtn.style.display = 'inline-block';
       submitBtn.disabled = true;
       submittedMsg.style.display = 'none';
 
-      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${displayStatus.textContent.split('| Score: ')[1] || 0}`;
+      const parts = displayStatus.textContent.split('| Score: ');
+      const scoreVal = parts[1] || '0';
+      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${scoreVal}`;
     }
   });
 </script>
