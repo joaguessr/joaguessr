@@ -43,9 +43,21 @@
       display: flex;
       flex-direction: column;
     }
+    .player-name-container {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
     .player-name {
       font-weight: bold;
       font-size: 16px;
+      color: #ffffff;
+      text-decoration: underline dotted #888;
+    }
+    .edit-icon {
+      font-size: 12px;
+      color: #aaa;
     }
     .game-status {
       font-size: 12px;
@@ -57,7 +69,7 @@
       align-items: center;
     }
     #submitBtn {
-      background-color: #4CAF50;
+      background-color: #00d26a;
       color: white;
       border: none;
       padding: 10px 16px;
@@ -73,7 +85,7 @@
     }
     #submittedMsg {
       display: none;
-      color: #4CAF50;
+      color: #00d26a;
       font-weight: bold;
       font-size: 14px;
       text-align: right;
@@ -84,14 +96,70 @@
       width: 100%;
       background: #222;
     }
+    
+    /* Welcome Popup Modal */
+    #welcomeModal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      padding: 20px;
+    }
+    .modal-card {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .modal-card h2 {
+      margin-bottom: 12px;
+      color: #00d26a;
+      font-size: 20px;
+    }
+    .modal-card p {
+      font-size: 15px;
+      color: #ddd;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+    .modal-card button {
+      background: #00d26a;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      width: 100%;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
+<!-- Welcome Modal -->
+<div id="welcomeModal" style="display:none;">
+  <div class="modal-card">
+    <h2 id="welcomeTitle">Welcome!</h2>
+    <p id="welcomeMessageText">Loading welcome message...</p>
+    <button onclick="closeWelcomeModal()">Let's Play!</button>
+  </div>
+</div>
+
 <div id="app-container">
   <div id="header">
     <div class="player-info">
-      <div class="player-name" id="displayName">Player</div>
+      <div class="player-name-container" onclick="changePlayerName()">
+        <span class="player-name" id="displayName">Player</span>
+        <span class="edit-icon">✏️</span>
+      </div>
       <div class="game-status" id="displayStatus">Q: 1/20 | Score: 0</div>
     </div>
     <div id="action-area">
@@ -105,14 +173,20 @@
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- Firebase SDKs (Compat version for lightweight implementation) -->
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<!-- Firebase SDK (v8 to match summary and admin tools) -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
 <script>
-  // 1. FIREBASE CONFIGURATION (Replace with your Firebase details if different)
+  // 1. FIREBASE CONFIGURATION (Matches admin-users and summary database URL)
   const firebaseConfig = {
-    databaseURL: "https://joaguessr-default-rtdb.firebaseio.com" // Update if using a custom DB URL
+    apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
+    authDomain: "joaguessr.firebaseapp.com",
+    databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "joaguessr",
+    storageBucket: "joaguessr.firebasestorage.app",
+    messagingSenderId: "852224945761",
+    appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
   };
   
   if (!firebase.apps.length) {
@@ -120,33 +194,38 @@
   }
   const db = firebase.database();
 
-  // 2. PARSE USER ID FROM URL (?id=p_123456)
+  // 2. GET PLAYER ID FROM URL (?id=p_12345)
   const urlParams = new URLSearchParams(window.location.search);
   const playerId = urlParams.get('id') || 'guest_' + Math.floor(Math.random() * 1000);
 
-  // UI Elements
+  // UI References
   const submitBtn = document.getElementById('submitBtn');
   const submittedMsg = document.getElementById('submittedMsg');
   const displayName = document.getElementById('displayName');
   const displayStatus = document.getElementById('displayStatus');
+  const welcomeModal = document.getElementById('welcomeModal');
+  const welcomeTitle = document.getElementById('welcomeTitle');
+  const welcomeMessageText = document.getElementById('welcomeMessageText');
 
   let currentPin = null;
   let selectedCoords = null;
   let currentQuestion = 1;
   let hasSubmittedCurrentQ = false;
+  let currentPlayerName = "Player";
 
-  // 3. INITIALIZE LEAFLET MAP (Fixes "API KEY REQUIRED" background issue)
+  // 3. MAP SETUP (OpenStreetMap Standard Tile Layer)
   const map = L.map('map', {
     zoomControl: true
-  }).setView([1.3521, 103.8198], 12); // Default centered on Singapore
+  }).setView([1.3521, 103.8198], 12);
 
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 19,
-  attribution: 'Tiles &copy; Esri'
-}).addTo(map);
-  // Map Click Event to Place/Move Pin
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Place/Move Pin Event
   map.on('click', function(e) {
-    if (hasSubmittedCurrentQ) return; // Lock pin placement if already submitted
+    if (hasSubmittedCurrentQ) return;
 
     selectedCoords = {
       lat: e.latlng.lat,
@@ -162,11 +241,43 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
     submitBtn.disabled = false;
   });
 
-  // 4. SUBMIT GUESS LOGIC
+  // 4. FETCH PLAYER DATA & WELCOME MSG
+  db.ref(`players/${playerId}`).on('value', (snap) => {
+    const data = snap.val();
+    if (data) {
+      currentPlayerName = data.name || "Player";
+      displayName.textContent = currentPlayerName;
+      
+      // Display score
+      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${data.score || 0}`;
+
+      // Show welcome popup once if welcome message exists and hasn't been closed
+      if (data.welcomeMsg && !sessionStorage.getItem('welcomeShown')) {
+        welcomeTitle.textContent = `Welcome, ${currentPlayerName}!`;
+        welcomeMessageText.textContent = data.welcomeMsg;
+        welcomeModal.style.display = 'flex';
+      }
+    }
+  });
+
+  function closeWelcomeModal() {
+    welcomeModal.style.display = 'none';
+    sessionStorage.setItem('welcomeShown', 'true');
+  }
+
+  // 5. ALLOW PLAYER TO EDIT PRESET NAME
+  function changePlayerName() {
+    const newName = prompt("Change display name:", currentPlayerName);
+    if (newName && newName.trim() !== "") {
+      const sanitizedName = newName.trim();
+      db.ref(`players/${playerId}/name`).set(sanitizedName);
+    }
+  }
+
+  // 6. SUBMIT GUESS LOGIC
   submitBtn.addEventListener('click', function() {
     if (!selectedCoords || hasSubmittedCurrentQ) return;
 
-    // Save guess to Firebase under player's record
     db.ref(`guesses/q${currentQuestion}/${playerId}`).set({
       lat: selectedCoords.lat,
       lng: selectedCoords.lng,
@@ -174,7 +285,7 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
     }).then(() => {
       hasSubmittedCurrentQ = true;
 
-      // Update UI: Hide button, show success message
+      // Hide button and display message
       submitBtn.style.display = 'none';
       submittedMsg.style.display = 'inline';
     }).catch((err) => {
@@ -183,12 +294,12 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
     });
   });
 
-  // 5. LISTEN FOR GAME STATE CHANGES (Syncs question number and score)
+  // 7. LISTEN FOR GAME STATE CHANGES
   db.ref('gameState').on('value', (snapshot) => {
     const data = snapshot.val() || {};
     const newQ = data.currentQuestion || 1;
 
-    // Reset interface if host advances to a new question
+    // Reset pin and submit button when host moves to new question
     if (newQ !== currentQuestion) {
       currentQuestion = newQ;
       hasSubmittedCurrentQ = false;
@@ -199,21 +310,12 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
         currentPin = null;
       }
 
-      // Restore submit button for the new round
       submitBtn.style.display = 'inline-block';
       submitBtn.disabled = true;
       submittedMsg.style.display = 'none';
+
+      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${displayStatus.textContent.split('| Score: ')[1] || 0}`;
     }
-
-    // Update status bar header
-    db.ref(`players/${playerId}`).once('value', (playerSnap) => {
-      const playerData = playerSnap.val() || {};
-      const name = playerData.name || playerId;
-      const score = playerData.score || 0;
-
-      displayName.textContent = name;
-      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${score}`;
-    });
   });
 </script>
 
