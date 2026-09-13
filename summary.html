@@ -196,7 +196,7 @@
       currentLayers = [];
     }
 
-    // Reveal player pins, target pin, and dotted connecting lines
+    // Reveal player pins and target pin
     async function revealQuestionGuesses() {
       clearPreviousLayers();
 
@@ -226,7 +226,7 @@
         currentLayers.push(targetMarker);
         boundsGroup.push(targetLatLng);
 
-        // 2. Plot Blue Player Pins & Dotted Lines
+        // 2. Plot Blue Player Pins
         Object.keys(guesses).forEach(playerId => {
           const g = guesses[playerId];
           const player = players[playerId] || { name: 'Anonymous' };
@@ -244,16 +244,7 @@
               `)
               .addTo(map);
 
-            // Dotted Polyline between Guess and Target
-            const line = L.polyline([guessLatLng, targetLatLng], {
-              color: '#ff4757',
-              dashArray: '8, 8',
-              weight: 3,
-              opacity: 0.8
-            }).addTo(map);
-
             currentLayers.push(pMarker);
-            currentLayers.push(line);
             boundsGroup.push(guessLatLng);
           }
         });
