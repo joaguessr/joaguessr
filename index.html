@@ -123,7 +123,7 @@
       z-index: 1;
     }
     
-    /* Generic Modal Styling (Welcome & Submission Confirmation) */
+    /* Generic Modal Styling */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -251,6 +251,7 @@
   let currentQuestion = 1;
   let hasSubmittedCurrentQ = false;
   let currentPlayerName = "Player";
+  let currentScore = 0;
 
   // 3. MAP SETUP
   const map = L.map('map', {
@@ -263,7 +264,7 @@
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Allow choosing and moving pins freely prior to submission
+  // Allow placing and updating pin position
   map.on('click', function(e) {
     if (hasSubmittedCurrentQ) return;
 
@@ -288,8 +289,8 @@
       currentPlayerName = data.name || "Player";
       displayName.textContent = currentPlayerName;
       
-      const currentScore = data.score || 0;
-      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${currentScore}`;
+      currentScore = data.score || 0;
+      updateStatusHeader();
 
       if (data.welcomeMsg && !sessionStorage.getItem('welcomeShown')) {
         welcomeTitle.textContent = `Welcome, ${currentPlayerName}!`;
@@ -298,6 +299,10 @@
       }
     }
   });
+
+  function updateStatusHeader() {
+    displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${currentScore}`;
+  }
 
   function closeWelcomeModal() {
     welcomeModal.style.display = 'none';
@@ -332,7 +337,7 @@
       submitBtn.textContent = 'Submitted';
       submitBtn.disabled = true;
 
-      // Display Popup Modal
+      // Display Confirmation Modal
       submitModal.style.display = 'flex';
     }).catch((err) => {
       alert("Error submitting guess. Please try again.");
@@ -340,29 +345,40 @@
     });
   });
 
-  // 7. RESET STATE WHEN HOST MOVES TO NEW QUESTION
-  db.ref('gameState').on('value', (snapshot) => {
-    const data = snapshot.val() || {};
-    const newQ = data.currentQuestion || 1;
+  // 7. REAL-TIME QUESTION & STATE SYNC
+  // Listens live to currentQuestion changes set by summary.html
+  db.ref('gameState/currentQuestion').on('value', (snapshot) => {
+    const activeQ = snapshot.val() || 1;
+    currentQuestion = activeQ;
+    updateStatusHeader();
 
-    if (newQ !== currentQuestion) {
-      currentQuestion = newQ;
-      hasSubmittedCurrentQ = false;
-      selectedCoords = null;
-
-      if (currentPin) {
-        map.removeLayer(currentPin);
-        currentPin = null;
-      }
-
-      // Reset submit button state for next question
-      submitBtn.textContent = 'Submit Guess';
-      submitBtn.disabled = true;
-
-      const parts = displayStatus.textContent.split('| Score: ');
-      const scoreVal = parts[1] || '0';
-      displayStatus.textContent = `Q: ${currentQuestion}/20 | Score: ${scoreVal}`;
+    // Reset Map Pin and Controls for the updated active question
+    if (currentPin) {
+      map.removeLayer(currentPin);
+      currentPin = null;
     }
+    selectedCoords = null;
+    hasSubmittedCurrentQ = false;
+
+    // Check if the player has already submitted a guess for this specific question
+    db.ref(`guesses/q${currentQuestion}/${playerId}`).once('value', (guessSnap) => {
+      const existingGuess = guessSnap.val();
+      
+      if (existingGuess && existingGuess.lat !== undefined && existingGuess.lng !== undefined) {
+        hasSubmittedCurrentQ = true;
+        selectedCoords = { lat: existingGuess.lat, lng: existingGuess.lng };
+        
+        // Display existing pin on map
+        currentPin = L.marker([existingGuess.lat, existingGuess.lng]).addTo(map);
+        map.setView([existingGuess.lat, existingGuess.lng], 12);
+
+        submitBtn.textContent = 'Submitted';
+        submitBtn.disabled = true;
+      } else {
+        submitBtn.textContent = 'Submit Guess';
+        submitBtn.disabled = true;
+      }
+    });
   });
 </script>
 
