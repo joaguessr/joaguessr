@@ -13,57 +13,76 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
+    
     html, body {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #121212;
       color: #ffffff;
-      position: fixed; /* Prevents whole-page scrolling on mobile devices */
     }
+
     #app-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      width: 100vw;
+      width: 100%;
+      height: 100%;
     }
     
-    /* Sticky Top Header Bar */
+    /* Hard-Locked Top Header Bar */
     #header {
+      position: relative;
+      z-index: 9999;
       height: 60px;
       min-height: 60px;
+      max-height: 60px;
       background-color: #1e1e1e;
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 0 16px;
       border-bottom: 1px solid #333;
-      z-index: 1000;
-      flex-shrink: 0; /* Prevents header from collapsing when map is touched */
+      flex-shrink: 0;
     }
+
     .player-info {
       display: flex;
       flex-direction: column;
       justify-content: center;
     }
+
     .player-name-container {
       display: flex;
       align-items: center;
       gap: 6px;
       cursor: pointer;
     }
+
     .player-name {
       font-weight: bold;
       font-size: 16px;
       color: #ffffff;
       text-decoration: underline dotted #888;
     }
+
     .edit-icon {
       font-size: 12px;
       color: #aaa;
     }
+
     .game-status {
       font-size: 12px;
       color: #aaa;
@@ -75,6 +94,7 @@
       display: flex;
       align-items: center;
     }
+
     #submitBtn {
       background-color: #00d26a;
       color: white;
@@ -84,41 +104,37 @@
       font-weight: bold;
       border-radius: 6px;
       cursor: pointer;
-      transition: background 0.2s ease;
+      transition: background 0.2s ease, color 0.2s ease;
     }
+
+    /* Grey state when disabled or already submitted */
     #submitBtn:disabled {
       background-color: #444;
       color: #888;
       cursor: not-allowed;
     }
-    #submittedMsg {
-      display: none;
-      color: #00d26a;
-      font-weight: bold;
-      font-size: 13px;
-      text-align: right;
-    }
 
-    /* Map Container filling remaining viewport space */
+    /* Map Container filling remaining space */
     #map {
-      flex: 1;
+      flex: 1 1 auto;
       width: 100%;
-      height: calc(100vh - 60px);
+      height: 100%;
       background: #222;
       z-index: 1;
     }
     
-    /* Welcome Popup Modal */
-    #welcomeModal {
+    /* Generic Modal Styling (Welcome & Submission Confirmation) */
+    .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0, 0, 0, 0.85);
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 2000;
+      z-index: 10000;
       padding: 20px;
     }
+
     .modal-card {
       background: #1e1e1e;
       border: 1px solid #333;
@@ -129,17 +145,20 @@
       text-align: center;
       box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     }
+
     .modal-card h2 {
       margin-bottom: 12px;
       color: #00d26a;
       font-size: 20px;
     }
+
     .modal-card p {
       font-size: 15px;
       color: #ddd;
       margin-bottom: 20px;
       line-height: 1.4;
     }
+
     .modal-card button {
       background: #00d26a;
       color: white;
@@ -156,16 +175,25 @@
 <body>
 
 <!-- Welcome Modal -->
-<div id="welcomeModal" style="display:none;">
+<div id="welcomeModal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
     <h2 id="welcomeTitle">Welcome!</h2>
     <p id="welcomeMessageText">Loading welcome message...</p>
-    <button onclick="closeWelcomeModal()">Let's Play!</button>
+    <button onclick="closeWelcomeModal()">I'm ready!</button>
+  </div>
+</div>
+
+<!-- Submission Confirmation Modal -->
+<div id="submitModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2>Your guess has been submitted! 📍</h2>
+    <p>Sit tight until the next question begins.</p>
+    <button onclick="closeSubmitModal()">Got it!</button>
   </div>
 </div>
 
 <div id="app-container">
-  <!-- Header remains locked at the top -->
+  <!-- Locked Top Bar -->
   <div id="header">
     <div class="player-info">
       <div class="player-name-container" onclick="changePlayerName()">
@@ -176,7 +204,6 @@
     </div>
     <div id="action-area">
       <button id="submitBtn" disabled>Submit Guess</button>
-      <span id="submittedMsg">Your guess has been submitted</span>
     </div>
   </div>
 
@@ -213,12 +240,12 @@
 
   // UI Elements
   const submitBtn = document.getElementById('submitBtn');
-  const submittedMsg = document.getElementById('submittedMsg');
   const displayName = document.getElementById('displayName');
   const displayStatus = document.getElementById('displayStatus');
   const welcomeModal = document.getElementById('welcomeModal');
   const welcomeTitle = document.getElementById('welcomeTitle');
   const welcomeMessageText = document.getElementById('welcomeMessageText');
+  const submitModal = document.getElementById('submitModal');
 
   let currentPin = null;
   let selectedCoords = null;
@@ -228,7 +255,8 @@
 
   // 3. MAP SETUP
   const map = L.map('map', {
-    zoomControl: true
+    zoomControl: true,
+    tap: true
   }).setView([1.3521, 103.8198], 12);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -238,7 +266,7 @@
 
   // Allow choosing and moving pins freely prior to submission
   map.on('click', function(e) {
-    if (hasSubmittedCurrentQ) return; // Disallow changes after submission
+    if (hasSubmittedCurrentQ) return;
 
     selectedCoords = {
       lat: e.latlng.lat,
@@ -251,7 +279,6 @@
       currentPin = L.marker(e.latlng).addTo(map);
     }
 
-    // Enable button once a location is chosen
     submitBtn.disabled = false;
   });
 
@@ -278,6 +305,10 @@
     sessionStorage.setItem('welcomeShown', 'true');
   }
 
+  function closeSubmitModal() {
+    submitModal.style.display = 'none';
+  }
+
   // 5. ALLOW PLAYER TO EDIT PRESET NAME
   function changePlayerName() {
     const newName = prompt("Change display name:", currentPlayerName);
@@ -298,9 +329,12 @@
     }).then(() => {
       hasSubmittedCurrentQ = true;
 
-      // Hide Submit Button and show Confirmation text (Header stays completely intact)
-      submitBtn.style.display = 'none';
-      submittedMsg.style.display = 'inline-block';
+      // Update button to grey disabled state
+      submitBtn.textContent = 'Submitted';
+      submitBtn.disabled = true;
+
+      // Display Popup Modal
+      submitModal.style.display = 'flex';
     }).catch((err) => {
       alert("Error submitting guess. Please try again.");
       console.error(err);
@@ -322,10 +356,9 @@
         currentPin = null;
       }
 
-      // Reset action area controls for the next question
-      submitBtn.style.display = 'inline-block';
+      // Reset submit button state for next question
+      submitBtn.textContent = 'Submit Guess';
       submitBtn.disabled = true;
-      submittedMsg.style.display = 'none';
 
       const parts = displayStatus.textContent.split('| Score: ');
       const scoreVal = parts[1] || '0';
