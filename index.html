@@ -1,174 +1,463 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Specto Camera Tracker</title>
-  <script src="https://docs.opencv.org/4.5.4/opencv.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JoaGuessr - Player</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
   <style>
-    body { font-family: sans-serif; text-align: center; margin: 0; background: #1a1a1a; color: white; }
-    .video-container { position: relative; display: inline-block; }
-    video, canvas { max-width: 100%; height: auto; display: block; }
-    #calibCanvas { position: absolute; top: 0; left: 0; z-index: 10; cursor: crosshair; }
-    .controls { margin: 10px; }
-    button { padding: 10px 16px; font-size: 16px; margin: 5px; background: #00e5ff; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #00b3cc; }
-    #status { font-weight: bold; color: #00e5ff; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    html, body {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+    }
+
+    #app-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* Hard-Locked Top Header Bar */
+    #header {
+      position: relative;
+      z-index: 9999;
+      height: 60px;
+      min-height: 60px;
+      max-height: 60px;
+      background-color: #1e1e1e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+
+    .player-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .player-name-container {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .player-name {
+      font-weight: bold;
+      font-size: 16px;
+      color: #ffffff;
+      text-decoration: underline dotted #888;
+    }
+
+    .edit-icon {
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .game-status {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+    
+    /* Action Area in Header */
+    #action-area {
+      display: flex;
+      align-items: center;
+    }
+
+    #submitBtn {
+      background-color: #00d26a;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    /* Grey state when disabled or already submitted */
+    #submitBtn:disabled {
+      background-color: #444;
+      color: #888;
+      cursor: not-allowed;
+    }
+
+    /* Map Container filling remaining space */
+    #map {
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      background: #222;
+      z-index: 1;
+    }
+    
+    /* Generic Modal Styling */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    .modal-card h2 {
+      margin-bottom: 12px;
+      color: #00d26a;
+      font-size: 20px;
+    }
+
+    .modal-card p {
+      font-size: 15px;
+      color: #ddd;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+
+    .modal-card button {
+      background: #00d26a;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      width: 100%;
+      cursor: pointer;
+    }
+
+    /* Personal Distance Banner Overlay */
+    #distanceBanner {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      background: rgba(20, 20, 20, 0.95);
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 14px 20px;
+      width: 90%;
+      max-width: 380px;
+      text-align: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      display: none;
+    }
+
+    .dist-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #00d26a;
+      margin-bottom: 4px;
+    }
+
+    .dist-sub {
+      font-size: 14px;
+      color: #3498db;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
-  <h2>Specto Camera Tracker</h2>
-  
-  <div class="video-container">
-    <video id="video" playsinline></video>
-    <canvas id="calibCanvas"></canvas>
+
+<!-- Welcome Modal -->
+<div id="welcomeModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2 id="welcomeTitle">Welcome!</h2>
+    <p id="welcomeMessageText">Loading welcome message...</p>
+    <button onclick="closeWelcomeModal()">I'm ready!</button>
+  </div>
+</div>
+
+<!-- Submission Confirmation Modal -->
+<div id="submitModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <h2>Your guess has been submitted! 📍</h2>
+    <button onclick="closeSubmitModal()">Got it!</button>
+  </div>
+</div>
+
+<div id="app-container">
+  <!-- Locked Top Bar -->
+  <div id="header">
+    <div class="player-info">
+      <div class="player-name-container" onclick="changePlayerName()">
+        <span class="player-name" id="displayName">Player</span>
+        <span class="edit-icon">✏️</span>
+      </div>
+      <div class="game-status" id="displayStatus">Q: 1/20</div>
+    </div>
+    <div id="action-area">
+      <button id="submitBtn" disabled>Submit Guess</button>
+    </div>
   </div>
 
-  <div class="controls">
-    <button onclick="resetCalibration()">Reset Calibration</button>
-    <button onclick="startShot()">Start Shot</button>
-  </div>
-  
-  <p id="status">Tap 4 lane corners on stream: Foul Left, Foul Right, Pins Left, Pins Right.</p>
+  <div id="map"></div>
 
-  <script>
-    // 1. Firebase Configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyD-N9N3wyM9FGIonLWDdKlAjQi9GNSFbqU",
-      authDomain: "bowling-target.firebaseapp.com",
-      databaseURL: "https://bowling-target-default-rtdb.asia-southeast1.firebasedatabase.app/",
-      projectId: "bowling-target"
-    };
+  <!-- Real-time Personal Distance Display -->
+  <div id="distanceBanner">
+    <div id="roundDistanceText" class="dist-title">📍 Distance: -- km</div>
+    <div id="totalDistanceText" class="dist-sub">🏆 Total: -- km</div>
+  </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+<script>
+  // 1. FIREBASE CONFIGURATION
+  const firebaseConfig = {
+    apiKey: "AIzaSyAK-Ho6KXOyBIJuNASCjXYtbb7ZbM_eD-A",
+    authDomain: "joaguessr.firebaseapp.com",
+    databaseURL: "https://joaguessr-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "joaguessr",
+    storageBucket: "joaguessr.firebasestorage.app",
+    messagingSenderId: "852224945761",
+    appId: "1:852224945761:web:5adc0b5a6e1282b7030420"
+  };
+  
+  if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+  }
+  const db = firebase.database();
 
-    const video = document.getElementById('video');
-    const calibCanvas = document.getElementById('calibCanvas');
-    const calibCtx = calibCanvas.getContext('2d');
-    
-    let calibPoints = [];
-    let H = null;
-    let currentShotId = null;
+  // 2. GET PLAYER ID FROM URL (?id=p_12345)
+  const urlParams = new URLSearchParams(window.location.search);
+  const playerId = urlParams.get('id') || 'guest_' + Math.floor(Math.random() * 1000);
 
-    // 2. Camera Access Setup
-    navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: "environment", width: 1280, height: 720, frameRate: { ideal: 60 } } 
-    }).then(stream => { 
-      video.srcObject = stream; 
-      video.play();
-      video.onloadedmetadata = () => {
-        calibCanvas.width = video.videoWidth;
-        calibCanvas.height = video.videoHeight;
-      };
+  // UI Elements
+  const submitBtn = document.getElementById('submitBtn');
+  const displayName = document.getElementById('displayName');
+  const displayStatus = document.getElementById('displayStatus');
+  const welcomeModal = document.getElementById('welcomeModal');
+  const welcomeTitle = document.getElementById('welcomeTitle');
+  const welcomeMessageText = document.getElementById('welcomeMessageText');
+  const submitModal = document.getElementById('submitModal');
+  const distanceBanner = document.getElementById('distanceBanner');
+  const roundDistanceText = document.getElementById('roundDistanceText');
+  const totalDistanceText = document.getElementById('totalDistanceText');
+
+  let currentPin = null;
+  let selectedCoords = null;
+  let currentQuestion = 1;
+  let hasSubmittedCurrentQ = false;
+  let currentPlayerName = "Player";
+  let distanceRefListener = null;
+
+  // 3. MAP SETUP
+  const map = L.map('map', {
+    zoomControl: true,
+    tap: true
+  }).setView([1.3521, 103.8198], 12);
+
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // Allow placing and updating pin position
+  map.on('click', function(e) {
+    if (hasSubmittedCurrentQ) return;
+
+    selectedCoords = {
+      lat: e.latlng.lat,
+      lng: e.latlng.lng
+    };
+
+    if (currentPin) {
+      currentPin.setLatLng(e.latlng);
+    } else {
+      currentPin = L.marker(e.latlng).addTo(map);
+    }
+
+    submitBtn.disabled = false;
+  });
+
+  // 4. FETCH PLAYER DATA & WELCOME MSG
+  db.ref(`players/${playerId}`).on('value', (snap) => {
+    const data = snap.val();
+    if (data) {
+      currentPlayerName = data.name || "Player";
+      displayName.textContent = currentPlayerName;
+
+      if (data.welcomeMsg && !sessionStorage.getItem('welcomeShown')) {
+        welcomeTitle.textContent = `Welcome, ${currentPlayerName}!`;
+        welcomeMessageText.textContent = data.welcomeMsg;
+        welcomeModal.style.display = 'flex';
+      }
+    }
+  });
+
+  function updateStatusHeader() {
+    displayStatus.textContent = `Q: ${currentQuestion}/20`;
+  }
+
+  function closeWelcomeModal() {
+    welcomeModal.style.display = 'none';
+    sessionStorage.setItem('welcomeShown', 'true');
+  }
+
+  function closeSubmitModal() {
+    submitModal.style.display = 'none';
+  }
+
+  // 5. ALLOW PLAYER TO EDIT PRESET NAME
+  function changePlayerName() {
+    const newName = prompt("Change display name:", currentPlayerName);
+    if (newName && newName.trim() !== "") {
+      const sanitizedName = newName.trim();
+      db.ref(`players/${playerId}/name`).set(sanitizedName);
+    }
+  }
+
+  // 6. SUBMIT GUESS LOGIC
+  submitBtn.addEventListener('click', function() {
+    if (!selectedCoords || hasSubmittedCurrentQ) return;
+
+    db.ref(`guesses/q${currentQuestion}/${playerId}`).set({
+      lat: selectedCoords.lat,
+      lng: selectedCoords.lng,
+      timestamp: Date.now()
+    }).then(() => {
+      hasSubmittedCurrentQ = true;
+
+      // Update button to grey disabled state
+      submitBtn.textContent = 'Submitted';
+      submitBtn.disabled = true;
+
+      // Display Confirmation Modal
+      submitModal.style.display = 'flex';
+    }).catch((err) => {
+      alert("Error submitting guess. Please try again.");
+      console.error(err);
     });
+  });
 
-    // 3. Interactive 4-Point Tap Calibration (Feature #2)
-    calibCanvas.addEventListener('click', (e) => {
-      if (calibPoints.length >= 8) return; // 4 points = 8 values (x,y)
-      
-      const rect = calibCanvas.getBoundingClientRect();
-      const scaleX = calibCanvas.width / rect.width;
-      const scaleY = calibCanvas.height / rect.height;
-      
-      const x = (e.clientX - rect.left) * scaleX;
-      const y = (e.clientY - rect.top) * scaleY;
-      calibPoints.push(x, y);
+  // 7. LISTEN FOR REVEALED DISTANCE RESULTS
+  function attachDistanceListener(qNum) {
+    if (distanceRefListener) {
+      distanceRefListener.off();
+    }
 
-      drawCalibrationPoints();
-      
-      if (calibPoints.length === 8) {
-        computeHomography();
+    distanceBanner.style.display = 'none';
+
+    distanceRefListener = db.ref(`guesses/q${qNum}/${playerId}/distanceKm`);
+    distanceRefListener.on('value', (snap) => {
+      const dist = snap.val();
+      if (dist !== null && dist !== undefined) {
+        roundDistanceText.innerHTML = `📍 Distance: <b>${dist} km</b> off target!`;
+        distanceBanner.style.display = 'block';
+        
+        calculateCumulativeTotal();
       }
     });
+  }
 
-    function drawCalibrationPoints() {
-      calibCtx.clearRect(0, 0, calibCanvas.width, calibCanvas.height);
-      calibCtx.fillStyle = '#ff0055';
-      for (let i = 0; i < calibPoints.length; i += 2) {
-        calibCtx.beginPath();
-        calibCtx.arc(calibPoints[i], calibPoints[i+1], 6, 0, 2 * Math.PI);
-        calibCtx.fill();
-      }
-    }
+  // 8. CALCULATE CUMULATIVE TOTAL DISTANCE (IN KM) ACROSS ALL QUESTIONS
+  async function calculateCumulativeTotal() {
+    try {
+      const snap = await db.ref('guesses').once('value');
+      const allGuesses = snap.val() || {};
+      let totalKm = 0;
 
-    function resetCalibration() {
-      calibPoints = [];
-      if (H) { H.delete(); H = null; }
-      calibCtx.clearRect(0, 0, calibCanvas.width, calibCanvas.height);
-      document.getElementById('status').innerText = "Calibration reset. Tap 4 lane corners on stream.";
-    }
-
-    function computeHomography() {
-      let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, calibPoints);
-      // Lane mapping: 0 to 39 boards (width), 0 to 60 feet (length)
-      let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0,0, 39,0, 0,60, 39,60]);
-      H = cv.getPerspectiveTransform(srcTri, dstTri);
-      srcTri.delete(); dstTri.delete();
-      document.getElementById('status').innerText = "Calibration Complete! Ready to Track.";
-    }
-
-    // 4. Shot Management (Feature #3: Shot History sync)
-    function startShot() {
-      if (!H) return alert("Please tap 4 points to complete calibration first!");
-      currentShotId = "shot_" + Date.now();
-      
-      // Store timestamp and active ID to allow historical comparisons
-      db.ref("shots/" + currentShotId).set({ timestamp: Date.now() });
-      db.ref("activeShot").set(currentShotId);
-      document.getElementById('status').innerText = "Tracking active shot...";
-    }
-
-    // 5. OpenCV Tracking & Perspective Mapping (Feature #1 Analytics Feed)
-    function onOpenCvReady() {
-      cv['onRuntimeInitialized'] = () => {
-        let cap = new cv.VideoCapture(video);
-        let src = new cv.Mat(720, 1280, cv.CV_8UC4);
-        let hsv = new cv.Mat(), mask = new cv.Mat();
-
-        function processFrame() {
-          if (H && currentShotId) {
-            cap.read(src);
-            cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
-            cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
-
-            // HSV filter for yellow/bright bowling ball (Adjust ranges if needed)
-            let low = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [15, 100, 100, 0]);
-            let high = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [35, 255, 255, 0]);
-            cv.inRange(hsv, low, high, mask);
-
-            let contours = new cv.MatVector(), hierarchy = new cv.Mat();
-            cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-            if (contours.size() > 0) {
-              let circle = cv.minEnclosingCircle(contours.get(0));
-              
-              // Map camera pixel coordinates to physical 2D lane coordinates via Matrix H
-              let pt = cv.matFromArray(1, 1, cv.CV_32FC2, [circle.center.x, circle.center.y]);
-              let dstPt = new cv.Mat();
-              cv.perspectiveTransform(pt, dstPt, H);
-
-              let laneX = dstPt.data32F[0]; // Board (0 - 39)
-              let laneY = dstPt.data32F[1]; // Feet (0 - 60)
-
-              // Streams frame metrics (x, y, timestamp) for speed and entry angle calculations
-              if (laneY >= 0 && laneY <= 60) {
-                db.ref(`shots/${currentShotId}/points`).push({ 
-                  x: laneX, 
-                  y: laneY, 
-                  t: Date.now() 
-                });
-              }
-
-              pt.delete(); dstPt.delete();
-            }
-            contours.delete(); hierarchy.delete(); low.delete(); high.delete();
-          }
-          requestAnimationFrame(processFrame);
+      Object.keys(allGuesses).forEach(qKey => {
+        const playerGuess = allGuesses[qKey][playerId];
+        if (playerGuess && playerGuess.distanceKm !== undefined) {
+          totalKm += Number(playerGuess.distanceKm);
         }
-        setTimeout(processFrame, 1000);
-      };
+      });
+
+      totalDistanceText.innerHTML = `🏆 Cumulative Total: <b>${totalKm.toFixed(2)} km</b>`;
+    } catch (err) {
+      console.error("Error calculating cumulative total:", err);
     }
-    window.onload = onOpenCvReady;
-  </script>
+  }
+
+  // 9. REAL-TIME QUESTION & STATE SYNC
+  db.ref('gameState/currentQuestion').on('value', (snapshot) => {
+    const activeQ = snapshot.val() || 1;
+    currentQuestion = activeQ;
+    updateStatusHeader();
+    attachDistanceListener(currentQuestion);
+
+    // Reset Map Pin and Controls for the updated active question
+    if (currentPin) {
+      map.removeLayer(currentPin);
+      currentPin = null;
+    }
+    selectedCoords = null;
+    hasSubmittedCurrentQ = false;
+
+    // Check if the player has already submitted a guess for this specific question
+    db.ref(`guesses/q${currentQuestion}/${playerId}`).once('value', (guessSnap) => {
+      const existingGuess = guessSnap.val();
+      
+      if (existingGuess && existingGuess.lat !== undefined && existingGuess.lng !== undefined) {
+        hasSubmittedCurrentQ = true;
+        selectedCoords = { lat: existingGuess.lat, lng: existingGuess.lng };
+        
+        // Display existing pin on map
+        currentPin = L.marker([existingGuess.lat, existingGuess.lng]).addTo(map);
+        map.setView([existingGuess.lat, existingGuess.lng], 12);
+
+        submitBtn.textContent = 'Submitted';
+        submitBtn.disabled = true;
+      } else {
+        submitBtn.textContent = 'Submit Guess';
+        submitBtn.disabled = true;
+      }
+    });
+  });
+</script>
+
 </body>
 </html>
